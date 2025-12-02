@@ -2,8 +2,7 @@ package com.github.yanxianchao.redapricot.http;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.stereotype.Component;
+
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -17,8 +16,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 /**
  * HTTP代理服务器主类
  */
-@Component
-public class HttpProxyServer implements CommandLineRunner {
+public class HttpProxyServer {
     
     private static final Logger LOGGER = LoggerFactory.getLogger(HttpProxyServer.class);
 
@@ -31,8 +29,7 @@ public class HttpProxyServer implements CommandLineRunner {
     private static final ThreadPoolExecutor workerThreadPool =
             new ThreadPoolExecutor(10, 10, 0L, MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 
-    @Override
-    public void run(String... args) throws Exception {
+    public void run() throws Exception {
         startServer(DEFAULT_PORT);
     }
 

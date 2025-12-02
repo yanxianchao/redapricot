@@ -14,14 +14,12 @@ import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.stereotype.Component;
+
 
 /**
  * SOCKS5 代理服务器
  */
-@Component
-public class Socks5ProxyServer implements CommandLineRunner {
+public class Socks5ProxyServer {
     private static final Logger logger = LoggerFactory.getLogger(Socks5ProxyServer.class);
 
     private final String host = "0.0.0.0";
@@ -30,8 +28,7 @@ public class Socks5ProxyServer implements CommandLineRunner {
     private EventLoopGroup workerGroup;
     private volatile boolean running = false;
 
-    @Override
-    public void run(String... args) throws Exception {
+    public void run() throws Exception {
         logger.info("准备启动SOCKS5代理服务器，绑定地址: {}:{}", host, port);
         this.start();
     }
@@ -48,6 +45,11 @@ public class Socks5ProxyServer implements CommandLineRunner {
                     .channel(NioServerSocketChannel.class)
                     .childOption(ChannelOption.SO_KEEPALIVE, true)
                     .childOption(ChannelOption.TCP_NODELAY, true)
+                    .childOption(ChannelOption.SO_RCVBUF, 64 * 1024)
+                    .childOption(ChannelOption.SO_SNDBUF, 64 * 1024)
+                    .childOption(ChannelOption.WRITE_BUFFER_WATER_MARK, 
+                            new io.netty.channel.WriteBufferWaterMark(32 * 1024, 128 * 1024))
+                    .childOption(ChannelOption.SO_LINGER, 0)
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         protected void initChannel(SocketChannel ch) throws Exception {
@@ -60,30 +62,7 @@ public class Socks5ProxyServer implements CommandLineRunner {
                             // SOCKS5握手处理器（处理握手逻辑）
                             ch.pipeline().addLast(new Socks5HandshakeHandler());
                         }
-                    })
-            .childOption(ChannelOption.SO_RCVBUF, 256 * 1024)
-            .childOption(ChannelOption.SO_SNDBUF, 256 * 1024)
-            .childOption(ChannelOption.WRITE_BUFFER_WATER_MARK, 
-                    new io.netty.channel.WriteBufferWaterMark(128 * 1024, 512 * 1024))
-            .childOption(ChannelOption.TCP_NODELAY, false)
-            .childOption(ChannelOption.SO_LINGER, 0)
-            .childHandler(new ChannelInitializer<SocketChannel>() {
-                        @Override
-                        protected void initChannel(SocketChannel ch) throws Exception {
-                            // Debug 日志
-                            //ch.pipeline().addLast(new LoggingHandler(LogLevel.DEBUG));
-                            // SOCKS协议统一处理器
-                            ch.pipeline().addLast(new SocksPortUnificationServerHandler());
-                            // SOCKS5编码器
-                            //ch.pipeline().addLast(Socks5ServerEncoder.DEFAULT);
-                            // SOCKS5握手处理器（处理握手逻辑）
-                            ch.pipeline().addLast(new Socks5HandshakeHandler());
-                        }
-                    })
-            .childOption(ChannelOption.SO_RCVBUF, 64 * 1024)
-            .childOption(ChannelOption.SO_SNDBUF, 64 * 1024)
-            .childOption(ChannelOption.WRITE_BUFFER_WATER_MARK, 
-                    new io.netty.channel.WriteBufferWaterMark(32 * 1024, 128 * 1024));;
+                    });
 
             ChannelFuture future = bootstrap.bind(host, port).sync();
             running = true;

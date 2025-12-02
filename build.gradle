@@ -1,7 +1,6 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.5.7'
-    id 'io.spring.dependency-management' version '1.1.7'
+    id 'application'
 }
 
 group = 'com.github.yanxianchao.redapricot'
@@ -16,17 +15,19 @@ repositories {
     mavenCentral()
 }
 
+application {
+    mainClass = 'com.github.yanxianchao.redapricot.ProxyServerApplication'
+}
+
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter'
-    
     // Netty dependencies
     implementation 'io.netty:netty-all:4.1.115.Final'
     
     // Logging
-    implementation 'org.slf4j:slf4j-api'
-    implementation 'ch.qos.logback:logback-classic'
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+    implementation 'ch.qos.logback:logback-classic:1.4.14'
     
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.1'
 }
 
 tasks.named('test') {

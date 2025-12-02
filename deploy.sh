@@ -52,12 +52,12 @@ sleep 2
 
 # 3. 打包应用
 print_info "正在打包应用..."
-./gradlew clean build -x test
+./gradlew clean build installDist -x test
 check_result "应用打包失败"
 
 # 4. 启动应用
 print_info "正在启动应用..."
-nohup java -XX:MaxHeapSize=1073741824 -XX:InitialHeapSize=268435456 -XX:ReservedCodeCacheSize=134217728 -XX:+UseSerialGC -jar build/libs/redapricot-1.0.0.jar > app.log 2>&1 &
+nohup ./build/install/redapricot/bin/redapricot > app.log 2>&1 &
 
 # 等待几秒钟让应用启动
 sleep 5
