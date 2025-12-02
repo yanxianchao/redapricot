@@ -16,6 +16,7 @@ public class RelayHandler extends ChannelInboundHandlerAdapter implements Channe
 
     private final Channel relayChannel;
     private volatile boolean isRelayActive = true;
+    private static final int BUFFER_SIZE = 16384; // 增加缓冲区大小到16KB
 
     public RelayHandler(Channel relayChannel) {
         this.relayChannel = relayChannel;
@@ -30,7 +31,7 @@ public class RelayHandler extends ChannelInboundHandlerAdapter implements Channe
         }
 
         // 将接收到的数据转发到对端
-        if (relayChannel.isActive()) {
+        if (relayChannel.isActive() && relayChannel.isWritable()) {
             ChannelFuture future = relayChannel.writeAndFlush(msg);
             future.addListener((ChannelFutureListener) f -> {
                 if (!f.isSuccess()) {
@@ -39,9 +40,9 @@ public class RelayHandler extends ChannelInboundHandlerAdapter implements Channe
                 }
             });
         } else {
-            // 如果对端通道不活跃，释放消息并关闭当前通道
+            // 如果对端通道不活跃或不可写，释放消息并关闭当前通道
             ReferenceCountUtil.release(msg);
-            logger.warn("对端通道不活跃，关闭当前连接,source={},target={}", ctx.channel().remoteAddress(), relayChannel.remoteAddress());
+            logger.warn("对端通道不活跃或不可写，关闭当前连接,source={},target={}", ctx.channel().remoteAddress(), relayChannel.remoteAddress());
             closeOnFlush(ctx.channel());
         }
     }

@@ -35,8 +35,8 @@ public class Socks5ProxyServer {
 
 
     public void start() throws InterruptedException {
-        bossGroup = new NioEventLoopGroup(2);
-        workerGroup = new NioEventLoopGroup(16);
+        bossGroup = new NioEventLoopGroup(4);
+        workerGroup = new NioEventLoopGroup(32);
 
         try {
 
@@ -45,11 +45,13 @@ public class Socks5ProxyServer {
                     .channel(NioServerSocketChannel.class)
                     .childOption(ChannelOption.SO_KEEPALIVE, true)
                     .childOption(ChannelOption.TCP_NODELAY, true)
-                    .childOption(ChannelOption.SO_RCVBUF, 64 * 1024)
-                    .childOption(ChannelOption.SO_SNDBUF, 64 * 1024)
+                    .childOption(ChannelOption.SO_RCVBUF, 128 * 1024)
+                    .childOption(ChannelOption.SO_SNDBUF, 128 * 1024)
                     .childOption(ChannelOption.WRITE_BUFFER_WATER_MARK, 
-                            new io.netty.channel.WriteBufferWaterMark(32 * 1024, 128 * 1024))
+                            new io.netty.channel.WriteBufferWaterMark(64 * 1024, 256 * 1024))
                     .childOption(ChannelOption.SO_LINGER, 0)
+                    .childOption(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
+                    .childOption(ChannelOption.ALLOW_HALF_CLOSURE, true)
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         protected void initChannel(SocketChannel ch) throws Exception {
