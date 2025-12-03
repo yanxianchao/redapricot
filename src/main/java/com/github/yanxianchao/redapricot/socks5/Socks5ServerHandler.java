@@ -4,6 +4,9 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.socksx.v5.*;
+import io.netty.handler.timeout.IdleStateHandler;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GenericFutureListener;
 
 import static io.netty.handler.codec.socksx.v5.Socks5CommandType.CONNECT;
 import static io.netty.handler.codec.socksx.v5.Socks5CommandType.UDP_ASSOCIATE;
@@ -12,9 +15,37 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class Socks5ServerHandler extends SimpleChannelInboundHandler<Socks5CommandRequest> {
     private static final Logger logger = LoggerFactory.getLogger(Socks5ServerHandler.class);
+    
+    // 全局连接管理器
+    private static volatile OptimizedConnectionManager connectionManager;
+    private static volatile ScheduledExecutorService cleanupExecutor;
+    
+    static {
+        // 初始化连接管理器和清理任务
+        if (connectionManager == null) {
+            synchronized (Socks5ServerHandler.class) {
+                if (connectionManager == null) {
+                    connectionManager = new OptimizedConnectionManager(new io.netty.channel.nio.NioEventLoopGroup(32));
+                    cleanupExecutor = Executors.newSingleThreadScheduledExecutor();
+                    // 每5分钟清理一次过期连接
+                    cleanupExecutor.scheduleAtFixedRate(() -> {
+                        try {
+                            connectionManager.cleanup();
+                        } catch (Exception e) {
+                            logger.error("清理连接池时发生错误", e);
+                        }
+                    }, 5, 5, TimeUnit.MINUTES);
+                }
+            }
+        }
+    }
 
     @Override
     public void channelRead0(ChannelHandlerContext ctx, Socks5CommandRequest request) throws Exception {
@@ -32,31 +63,11 @@ public class Socks5ServerHandler extends SimpleChannelInboundHandler<Socks5Comma
     private void handleConnectCommand(ChannelHandlerContext ctx, Socks5CommandRequest request) {
         logger.info("处理CONNECT命令 - 目标地址: {}:{}", request.dstAddr(), request.dstPort());
 
-        Bootstrap bootstrap = new Bootstrap();
-        bootstrap.group(ctx.channel().eventLoop())
-                .channel(NioSocketChannel.class)
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
-                .option(ChannelOption.SO_KEEPALIVE, true)
-                .option(ChannelOption.SO_RCVBUF, 256 * 1024)
-                .option(ChannelOption.SO_SNDBUF, 256 * 1024)
-                .option(ChannelOption.TCP_NODELAY, true)
-                .option(ChannelOption.ALLOW_HALF_CLOSURE, true)
-                .option(ChannelOption.SO_REUSEADDR, true)
-                .option(ChannelOption.AUTO_READ, true)
-                .option(ChannelOption.MAX_MESSAGES_PER_READ, 16)
-                .option(ChannelOption.WRITE_BUFFER_WATER_MARK, 
-                        new io.netty.channel.WriteBufferWaterMark(128 * 1024, 512 * 1024))
-                .handler(new ChannelInitializer<Channel>() {
-                    @Override
-                    protected void initChannel(Channel ch) throws Exception {
-                        // 为目标服务器通道添加RelayHandler，指向客户端通道
-                        ch.pipeline().addLast(new RelayHandler(ctx.channel()));
-                    }
-                });
-
-        ChannelFuture future = bootstrap.connect(request.dstAddr(), request.dstPort());
-        future.addListener((ChannelFutureListener) f -> {
+        // 使用优化的连接管理器
+        Future<Channel> connectionFuture = connectionManager.getOrCreateConnection(request.dstAddr(), request.dstPort());
+        connectionFuture.addListener((Future<Channel> f) -> {
             if (f.isSuccess()) {
+                Channel targetChannel = f.getNow();
                 logger.info("成功连接到目标服务器: {}:{}", request.dstAddr(), request.dstPort());
                 
                 // 发送成功响应 - 使用正确的目标地址
@@ -68,9 +79,9 @@ public class Socks5ServerHandler extends SimpleChannelInboundHandler<Socks5Comma
                 );
                 ctx.writeAndFlush(response);
 
-                // 设置双向数据转发
-                Channel targetChannel = f.channel();
-
+                // 为目标服务器通道添加RelayHandler，指向客户端通道
+                targetChannel.pipeline().addLast(new RelayHandler(ctx.channel()));
+                
                 // 为客户端通道添加RelayHandler，指向目标服务器通道（客户端->服务器方向）
                 ctx.pipeline().addLast(new RelayHandler(targetChannel));
 
