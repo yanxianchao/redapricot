@@ -35,13 +35,17 @@ public class Socks5ServerHandler extends SimpleChannelInboundHandler<Socks5Comma
         Bootstrap bootstrap = new Bootstrap();
         bootstrap.group(ctx.channel().eventLoop())
                 .channel(NioSocketChannel.class)
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
                 .option(ChannelOption.SO_KEEPALIVE, true)
-                .option(ChannelOption.SO_RCVBUF, 64 * 1024)
-                .option(ChannelOption.SO_SNDBUF, 64 * 1024)
+                .option(ChannelOption.SO_RCVBUF, 256 * 1024)
+                .option(ChannelOption.SO_SNDBUF, 256 * 1024)
                 .option(ChannelOption.TCP_NODELAY, true)
                 .option(ChannelOption.ALLOW_HALF_CLOSURE, true)
                 .option(ChannelOption.SO_REUSEADDR, true)
+                .option(ChannelOption.AUTO_READ, true)
+                .option(ChannelOption.MAX_MESSAGES_PER_READ, 16)
+                .option(ChannelOption.WRITE_BUFFER_WATER_MARK, 
+                        new io.netty.channel.WriteBufferWaterMark(128 * 1024, 512 * 1024))
                 .handler(new ChannelInitializer<Channel>() {
                     @Override
                     protected void initChannel(Channel ch) throws Exception {

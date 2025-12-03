@@ -16,7 +16,7 @@ public class RelayHandler extends ChannelInboundHandlerAdapter implements Channe
 
     private final Channel relayChannel;
     private volatile boolean isRelayActive = true;
-    private static final int BUFFER_SIZE = 16384; // 增加缓冲区大小到16KB
+    private static final int BUFFER_SIZE = 65536; // 增加缓冲区大小到64KB
 
     public RelayHandler(Channel relayChannel) {
         this.relayChannel = relayChannel;
@@ -31,18 +31,30 @@ public class RelayHandler extends ChannelInboundHandlerAdapter implements Channe
         }
 
         // 将接收到的数据转发到对端
-        if (relayChannel.isActive() && relayChannel.isWritable()) {
-            ChannelFuture future = relayChannel.writeAndFlush(msg);
-            future.addListener((ChannelFutureListener) f -> {
-                if (!f.isSuccess()) {
-                    logger.debug("数据转发到对端失败: {}", f.cause().getMessage());
-                    closeOnFlush(ctx.channel());
-                }
-            });
+        if (relayChannel.isActive()) {
+            if (relayChannel.isWritable()) {
+                ChannelFuture future = relayChannel.writeAndFlush(msg);
+                future.addListener((ChannelFutureListener) f -> {
+                    if (!f.isSuccess()) {
+                        logger.debug("数据转发到对端失败: {}", f.cause().getMessage());
+                        closeOnFlush(ctx.channel());
+                    }
+                });
+            } else {
+                // 对端不可写时，等待一段时间再尝试
+                ctx.channel().config().setAutoRead(false);
+                relayChannel.writeAndFlush(msg).addListener((ChannelFutureListener) f -> {
+                    ctx.channel().config().setAutoRead(true);
+                    if (!f.isSuccess()) {
+                        logger.debug("延迟数据转发失败: {}", f.cause().getMessage());
+                        closeOnFlush(ctx.channel());
+                    }
+                });
+            }
         } else {
-            // 如果对端通道不活跃或不可写，释放消息并关闭当前通道
+            // 如果对端通道不活跃，释放消息并关闭当前通道
             ReferenceCountUtil.release(msg);
-            logger.warn("对端通道不活跃或不可写，关闭当前连接,source={},target={}", ctx.channel().remoteAddress(), relayChannel.remoteAddress());
+            logger.debug("对端通道不活跃，关闭当前连接,source={},target={}", ctx.channel().remoteAddress(), relayChannel.remoteAddress());
             closeOnFlush(ctx.channel());
         }
     }
